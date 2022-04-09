@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package helloworld.v1;
+
+option go_package = "hello/api/helloworld/v1;v1";
+option java_multiple_files = true;
+option java_package = "dev.kratos.api.helloworld.v1";
+option java_outer_classname = "HelloworldProtoV1";
+
+import "google/api/annotations.proto";
+
+// The greeting service definition.
+service Greeter {
+  // Sends a greeting
+    rpc CreateMovie(CreateMovieRequest) returns (CreateMovieReply) {
+      option (google.api.http) = {
+        post: "/v1/movie"
+        body: "*"
+      };
+    }
+
+    rpc UpdateMovie(UpdateMovieRequest) returns (UpdateMovieReply) {
+      option (google.api.http) = {
+        put: "/v1/movie/{id}"
+        body: "*"
+      };
+    }
+
+    rpc GetMovie(GetMovieRequest) returns (GetMovieReply) {
+      option (google.api.http) = {
+        get: "/v1/movie/{id}"
+      };
+    }
+
+    rpc ListMovie(ListMovieRequest) returns (ListMovieReply) {
+      option (google.api.http) = {
+        get: "/v1/movie"
+      };
+    }
+}
+
+message Movie {
+  int64 id = 1;
+  string title = 2;
+  string geners = 3;
+}
+
+message CreateMovieRequest {
+  string title = 1;
+  string geners = 2;
+}
+
+message CreateMovieReply {
+  Movie Movie = 1;
+}
+
+message UpdateMovieRequest {
+  int64 id = 1;
+  string title = 2;
+  string geners = 3;
+}
+
+message UpdateMovieReply {
+  Movie Movie = 1;
+}
+
+message GetMovieRequest {
+  int64 id = 1;
+}
+
+message GetMovieReply {
+  Movie Movie = 1;
+}
+
+message ListMovieRequest {
+}
+
+message ListMovieReply {
+  repeated Movie result = 1;
+}
