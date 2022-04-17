@@ -12,7 +12,6 @@ type RollingWindow struct {
 	broke         bool
 	size          int
 	buckets       []*Bucket
-	seeker        bool
 	reqThreshold  int     //触发熔断的请求总数阈值
 	failThreshold float64 //触发熔断的失败率阈值
 	lastBrokeTime time.Time
@@ -115,13 +114,4 @@ func (r *RollingWindow) ShowStatus() {
 
 func (r *RollingWindow) Broken() bool {
 	return r.broke
-}
-
-func (r *RollingWindow) SetSeeker(status bool) {
-	r.Lock()
-	defer r.Unlock()
-}
-
-func (r *RollingWindow) Seeker() bool {
-	return r.seeker
 }
