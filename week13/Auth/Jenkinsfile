@@ -1,0 +1,98 @@
+//模板需要修改的值：label(配置的jenkins的slave标签),cloud:(配置的jenkins的cloud)
+def label = "jenkins-slave-auth"
+
+podTemplate(label: label , cloud: 'kubernetes-auth') {
+  node(label) {
+    def myRepo = checkout scm
+    def gitBranch = myRepo.GIT_BRANCH.replaceAll("origin/","").replaceAll("/","-").replaceAll("\\.","-")
+    def timestamp = sh(script: "echo `date '+%Y%m%d%H%M%S'`", returnStdout: true).trim()
+    def gitCommit = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
+    gitCommit = "${gitCommit}_${timestamp}"
+    def imageTag = "${gitBranch}"
+    def dockerRegistryUrl = "69.172.74.253:8080"
+    
+    //模板需要更改的值 开始
+    def helmReleaseName = "auth-${gitBranch}"
+    def namespace = "auth"
+    def gatewayHost = "eop-auth.eflycloud.com"
+    def imageEndpoint = "auth/webapi"
+    //模板需要更改的值 结束
+    
+    def image = "${dockerRegistryUrl}/${imageEndpoint}"
+    def chartName = "istio"
+    def chartVersion = "1.0"
+    def chartDirName = "istio/istiochart"
+
+
+    stage('单元测试阶段') {
+        // echo "${gitBranch}"
+        
+    //   echo "${gitCommit}"
+    //  echo "${gitBranch}"
+    //  echo "${imageTag}"
+    //  echo "${dockerRegistryUrl}"
+    //  echo "${imageEndpoint}"
+    //  echo "${image}"
+        script{
+            if(gitBranch == 'master'){
+                gatewayHost = "eop-test-jgnb-auth.eflycloud.com"
+            }
+        }
+    }
+    
+    stage('GO 编译阶段') {
+        container('golang') {
+            sh 'cd $WORKSPACE/cmd && go build'
+        }
+    }
+    
+    stage('构建 Docker 镜像阶段') {
+        container('构建 Docker 镜像') {
+          withCredentials([[$class: 'UsernamePasswordMultiBinding',
+            credentialsId: 'docker-harbor',
+            usernameVariable: 'DOCKER_HUB_USER',
+            passwordVariable: 'DOCKER_HUB_PASSWORD']]) {
+              container('docker') {
+                sh """
+                  docker login ${dockerRegistryUrl} -u ${DOCKER_HUB_USER} -p ${DOCKER_HUB_PASSWORD}
+                  docker build -t ${imageEndpoint}:${imageTag} .
+                  docker tag ${imageEndpoint}:${imageTag}   ${dockerRegistryUrl}/${imageEndpoint}:${imageTag}
+                  docker push ${image}:${imageTag}
+                  """
+              }
+          }
+        }
+    }
+    
+    stage('Helm 部署阶段') {
+        withCredentials([[$class: 'UsernamePasswordMultiBinding',
+        credentialsId: 'docker-harbor',
+        usernameVariable: 'DOCKER_HUB_USER',
+        passwordVariable: 'DOCKER_HUB_PASSWORD']]) {
+            container('helm') {
+                // todo，也可以做一些其他的分支判断是否要直接部署
+                echo "[INFO] 开始 Helm 部署"
+                echo "1 初始化helm client"
+                sh "helm init --client-only --stable-repo-url https://mirror.azure.cn/kubernetes/charts/"
+                sh "helm repo add --username ${DOCKER_HUB_USER} --password ${DOCKER_HUB_PASSWORD} ${chartName} http://${dockerRegistryUrl}/chartrepo/${chartName}"
+                echo "2 如果更新了chart包则需要更新repo"
+                sh "helm repo update"
+                echo "3 更新 ${helmReleaseName} 应用"
+                sh """
+                    helm upgrade --install ${helmReleaseName} ${chartDirName} \
+                    --version ${chartVersion} \
+                    --set namespace=${namespace} \
+                    --set gitCommit=${gitCommit} \
+                    --set gitBranch=${gitBranch} \
+                    --set productionDeployment.image.repository=${image} \
+                    --set canaryDeployment.image.repository=${image} \
+                    --set productionDeployment.image.tag=${imageTag} \
+                    --set gatewayhost=${gatewayHost} \
+                    --namespace=${namespace}
+                    """
+                echo "[INFO] Helm 部署应用成功..."
+            }
+        }
+    }
+  }
+}
